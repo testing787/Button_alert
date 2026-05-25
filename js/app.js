@@ -20,169 +20,95 @@ document.onkeydown = function (e) {
         return false;
     }
 };
-
-// Importar las funciones necesarias de los módulos de Firebase
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-import { getAuth, RecaptchaVerifier, signInWithPhoneNumber } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+// --- IMPORTACIONES ---
+import { auth, app } from "/js/conexion.js"; // Asegúrate de exportar 'app' en conexion.js
 import { getFirestore, doc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import { RecaptchaVerifier, signInWithPhoneNumber } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 import Swal from 'https://cdn.jsdelivr.net/npm/sweetalert2@11/+esm';
 
-// Configuración de tu proyecto Firebase
-const firebaseConfig = {
-    apiKey: "AIzaSyBljf2sZQh9hQ-NDRNyOBmSZfmpeSx6Oso",
-    authDomain: "alertbutton-75394.firebaseapp.com",
-    projectId: "alertbutton-75394",
-    storageBucket: "alertbutton-75394.firebasestorage.app",
-    messagingSenderId: "872466013993",
-    appId: "1:872466013993:web:ca59da94d14ad2e6aca138",
-    measurementId: "G-D5QZ74V0DT"
-};
-
-// Inicializar servicios
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
+// --- INICIALIZACIÓN ---
 const db = getFirestore(app);
-
 auth.languageCode = 'es';
+auth.settings.appVerificationDisabledForTesting = true; // Forzamos modo pruebas
 
-let verifierConfigurado = false;
 let resultadoConfirmacion = null;
 
-// Validar si estamos en entorno local de pruebas
-const esLocal = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
-
-if (esLocal) {
-    auth.settings.appVerificationDisabledForTesting = true;
-    console.log("🔒 Modo desarrollo: Verificación de reCAPTCHA deshabilitada para pruebas.");
-}
-
-// Inicializa el reCAPTCHA (Solo necesario en producción real)
+// --- FUNCIONES AUXILIARES ---
 function configurarRecaptcha() {
-    if (esLocal) {
-        // En local pasamos un verificador ficticio dummy que exige Firebase
-        window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', { 'size': 'invisible' });
-        verifierConfigurado = true;
-        return;
-    }
-
-    if (!verifierConfigurado) {
-        window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
-            'size': 'invisible',
-            'callback': (response) => { }
-        });
-        verifierConfigurado = true;
-    }
+    if (window.recaptchaVerifier) window.recaptchaVerifier.clear();
+    window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
+        'size': 'invisible'
+    });
 }
 
-// =========================================================================
-// PASO 1: Enviar SMS al número telefónico (Blindado contra recargas)
-// =========================================================================
+// --- PASO 1: ENVIAR SMS ---
 document.getElementById('btn-enviar-sms').addEventListener('click', async (e) => {
-    e.preventDefault(); // ◄--- EVITA QUE LA PÁGINA SE RECARGUE Y BORRE LA VARIABLE
-
+    e.preventDefault();
     const nombre = document.getElementById('txt-nombre').value.trim();
     const telefonoInput = document.getElementById('txt-telefono').value.trim();
 
     if (!nombre || telefonoInput.length !== 10) {
-        alert("Por favor, ingresa tu nombre y un número celular válido a 10 dígitos.");
+        Swal.fire("Error", "Nombre y teléfono de 10 dígitos requerido.", "warning");
         return;
     }
 
-    const formatoInternacional = `+52${telefonoInput}`;
-    console.log("Enviando número limpio a Firebase:", formatoInternacional);
-
     configurarRecaptcha();
-    const appVerifier = window.recaptchaVerifier;
 
     try {
-        resultadoConfirmacion = await signInWithPhoneNumber(auth, formatoInternacional, appVerifier);
-        console.log("🔒 Token guardado con éxito en memoria:", resultadoConfirmacion);
+        const formatoInternacional = `+52${telefonoInput}`;
+        resultadoConfirmacion = await signInWithPhoneNumber(auth, formatoInternacional, window.recaptchaVerifier);
+        sessionStorage.setItem('auth_pending', 'true');
 
-        // Intercambiar visibilidad de las secciones
         document.getElementById('seccion-telefono').classList.add('d-none');
         document.getElementById('seccion-codigo').classList.remove('d-none');
     } catch (error) {
-        console.error("Error al enviar el SMS:", error);
-        alert(`Error al iniciar verificación: ${error.message}`);
-        if (window.recaptchaVerifier) window.recaptchaVerifier.clear();
-        verifierConfigurado = false;
+        Swal.fire("Error", "No se pudo enviar el SMS: " + error.message, "error");
     }
 });
 
-// =========================================================================
-// PASO 2: Confirmar el código enviado (Blindado con lectura de error real)
-// =========================================================================
+// --- PASO 2: VERIFICAR ---
 document.getElementById('btn-verificar-codigo').addEventListener('click', async (e) => {
-    e.preventDefault(); // ◄--- EVITA QUE LA PÁGINA SE RECARGUE AL DAR CLIC
-
+    e.preventDefault();
     const codigo = document.getElementById('txt-codigo').value.trim();
     const nombre = document.getElementById('txt-nombre').value.trim();
-    const telefonoInput = document.getElementById('txt-telefono').value.trim();
+    const telefono = document.getElementById('txt-telefono').value.trim();
 
-    if (codigo.length !== 6) {
-        alert("El código debe contener exactamente 6 dígitos.");
-        return;
-    }
-
-    // Alerta de depuración si la variable se borró por completo
-    if (!resultadoConfirmacion) {
-        alert("⚠️ Error de flujo: La sesión de Firebase se perdió. No recargues la página entre el Paso 1 y el Paso 2.");
+    if (!resultadoConfirmacion || !sessionStorage.getItem('auth_pending')) {
+        Swal.fire("Error", "La sesión expiró.", "error");
         return;
     }
 
     try {
-        console.log("Intentando validar el código contra el token activo...");
-        const credencialUsuario = await resultadoConfirmacion.confirm(codigo);
-        const usuario = credencialUsuario.user;
+        const credencial = await resultadoConfirmacion.confirm(codigo);
 
-        // Guardar el registro en Firestore
-        await setDoc(doc(db, "usuarios_alertas", usuario.uid), {
-            uid: usuario.uid,
+        await setDoc(doc(db, "usuarios_alertas", credencial.user.uid), {
+            uid: credencial.user.uid,
             nombre: nombre,
-            telefono: `+52${telefonoInput}`,
+            telefono: `+52${telefono}`,
             fechaRegistro: serverTimestamp(),
-            rol: "CIUDADANO",
-            cuentaActiva: true
+            rol: "CIUDADANO"
         });
 
-        Swal.fire({
-            title: '¡Registro exitoso!',
-            text: 'Identidad verificada.',
-            icon: 'success',
-            confirmButtonColor: '#28a745'
-        }).then((result) => {
-            if (result.isConfirmed) {
-                // Redirigir después de que el usuario haga clic en el botón
-                window.location.href = "./pantalla_alerta.html";
-            }
+        sessionStorage.removeItem('auth_pending');
+        Swal.fire("¡Éxito!", "Identidad verificada.", "success").then(() => {
+            window.location.href = "./pantalla_alerta.html";
         });
-
     } catch (error) {
-        console.error("Detalle completo del error de Firebase:", error);
-        // Te dirá textualmente qué está rechazando el servidor (ej: auth/invalid-verification-code)
-        alert(`Firebase denegó el acceso: ${error.code || error.message}`);
+        Swal.fire("Error", "Código incorrecto: " + error.code, "error");
     }
 });
-// =========================================================================
-// PASO 3: Función para regresar
-// =========================================================================
+
+// --- PASO 3: REGRESAR ---
 document.getElementById('btn-regresar').addEventListener('click', () => {
     document.getElementById('seccion-codigo').classList.add('d-none');
     document.getElementById('seccion-telefono').classList.remove('d-none');
-
-    if (window.recaptchaVerifier) {
-        window.recaptchaVerifier.clear();
-        document.getElementById('recaptcha-container').innerHTML = '';
-    }
-    verifierConfigurado = false;
     resultadoConfirmacion = null;
+    sessionStorage.removeItem('auth_pending');
 });
 
-// Registro del Service Worker para soporte PWA
+// Registro del Service Worker (Se ejecuta al cargar)
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/js/sw.js')
-            .then(reg => console.log('PWA lista para instalarse', reg))
-            .catch(err => console.error('Error de Service Worker', err));
+        navigator.serviceWorker.register('/js/sw.js').catch(console.error);
     });
 }

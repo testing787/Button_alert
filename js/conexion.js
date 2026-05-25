@@ -1,28 +1,5 @@
-// Protección activa contra la apertura de la consola de desarrollo
-(function () {
-    const laConsolaMataModulos = function () {
-        setInterval(function () {
-            if (window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1") {
-                debugger;
-            }
-        }, 100);
-    };
-    try { laConsolaMataModulos(); } catch (e) { }
-})();
-
-// Deshabilitar el clic derecho y combinaciones de teclas de inspección
-document.addEventListener('contextmenu', event => event.preventDefault());
-
-document.onkeydown = function (e) {
-    if (e.keyCode == 123 ||
-        (e.ctrlKey && e.shiftKey && (e.keyCode == 73 || e.keyCode == 74)) ||
-        (e.ctrlKey && e.keyCode == 85)) {
-        return false;
-    }
-};
-
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-import { getAuth, setPersistence, browserSessionPersistence } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+import { getAuth } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 import { getFirestore } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -36,10 +13,13 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
-export const auth = getAuth(app);
-export const db = getFirestore(app);
+const auth = getAuth(app);
+const db = getFirestore(app);
 
-// Forzar el modo de pruebas si es necesario (solo en desarrollo)
+// APLICACIÓN INMEDIATA: Forzar modo pruebas si estamos en localhost
 if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
     auth.settings.appVerificationDisabledForTesting = true;
+    console.log("Modo pruebas habilitado en conexion.js");
 }
+
+export { auth, db, app };

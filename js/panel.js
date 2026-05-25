@@ -83,8 +83,7 @@ function iniciarMonitoreoAlertas() {
                 <td>${alerta.telefono || 'N/A'}</td>
                 <td><a href="https://www.google.com/maps?q=${alerta.coordenadas?.latitud},${alerta.coordenadas?.longitud}" target="_blank" class="btn btn-sm btn-outline-primary">Mapa</a></td>
                 <td><span class="badge ${alerta.estatus === 'NUEVA_ALERTA' ? 'bg-danger' : 'bg-warning'}">${alerta.estatus}</span></td>
-                <td>
-                    ${alerta.estatus === 'NUEVA_ALERTA' ? `<button class="btn btn-dark btn-sm" onclick="atenderAlerta_UI('${id}')">Atender</button>` : ''}
+                <td>${alerta.estatus === 'NUEVA_ALERTA' ? `<button class="btn btn-dark btn-sm" onclick="atenderAlerta_UI('${id}')">Atender</button>` : ''}
                     ${alerta.estatus === 'EN_ATENCION' ? `<button class="btn btn-success btn-sm" onclick="finalizarAlerta_UI('${id}')">Finalizar</button>` : ''}
                 </td>
             `;
@@ -125,7 +124,7 @@ onAuthStateChanged(auth, (user) => {
     if (!user) {
         if (window.location.pathname.includes("panel.html")) window.location.href = "./login.html";
     } else {
-        // FILTRO: Si el usuario que entró tiene teléfono, es un ciudadano. ¡EXPÚLSALO!
+        // FILTRO: Si el usuario que entró tiene teléfono, es un ciudadano.
         if (user.phoneNumber) {
             console.warn("Usuario ciudadano detectado en panel. Cerrando sesión...");
             signOut(auth); // Esto cierra la sesión del ciudadano, pero NO debería afectar si el panel está en otro contexto

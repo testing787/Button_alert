@@ -1,26 +1,3 @@
-// Protección activa contra la apertura de la consola de desarrollo
-(function () {
-    const laConsolaMataModulos = function () {
-        setInterval(function () {
-            if (window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1") {
-                debugger;
-            }
-        }, 100);
-    };
-    try { laConsolaMataModulos(); } catch (e) { }
-})();
-
-// Deshabilitar el clic derecho y combinaciones de teclas de inspección
-document.addEventListener('contextmenu', event => event.preventDefault());
-
-document.onkeydown = function (e) {
-    if (e.keyCode == 123 ||
-        (e.ctrlKey && e.shiftKey && (e.keyCode == 73 || e.keyCode == 74)) ||
-        (e.ctrlKey && e.keyCode == 85)) {
-        return false;
-    }
-};
-
 const CACHE_NAME = 'alerta-v1';
 const ASSETS = [
   '/',
